@@ -41,33 +41,32 @@ SponsorScope addresses this by producing explainable categories:
 
 ## Architecture
 
-```text
-JSearch API
-    |
-    v
-Raw timestamped JSON
-    |
-    v
-Normalization -> relevance -> deduplication
-    |
-    +---------------------------+
-    |                           |
-    v                           v
-Current-policy classifier   Historical DOL matcher
-                                |
-                                +-- employer resolution
-                                +-- occupation/SOC resolution
-    |                           |
-    +-------------+-------------+
-                  |
-                  v
-              PostgreSQL
-                  |
-                  v
-          FastAPI REST service
-                  |
-                  v
-          Next.js web interface
+```mermaid
+flowchart TD
+    JSEARCH[JSearch API] --> INGEST[Job extraction]
+    INGEST --> RAW[Timestamped raw JSON snapshots]
+    RAW --> TRANSFORM[Normalization, relevance filtering<br/>and deduplication]
+
+    DOL[Department of Labor<br/>LCA disclosure data] --> DOLPROCESS[DOL cleaning and aggregation]
+    DOLPROCESS --> HISTORY[Processed historical evidence]
+
+    TRANSFORM --> CLASSIFIER[Current-posting<br/>policy classifier]
+    TRANSFORM --> MATCHER[Historical sponsorship matcher]
+    HISTORY --> MATCHER
+
+    MATCHER --> EMPLOYER[Employer resolution]
+    EMPLOYER --> OCCUPATION[Occupation and SOC resolution]
+
+    CLASSIFIER --> ENRICHED[Versioned sponsorship evidence]
+    OCCUPATION --> ENRICHED
+
+    ENRICHED --> DATABASE[(PostgreSQL)]
+    DATABASE --> API[FastAPI REST API]
+    API --> CACHE[Search-result cache]
+    API --> FRONTEND[Next.js frontend]
+
+    FRONTEND -->|Search request| API
+    API -->|Jobs, categories and evidence| FRONTEND
 ```
 
 ## Technology stack
