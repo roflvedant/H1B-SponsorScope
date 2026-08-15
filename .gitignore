@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# Secrets and local environment configuration
+# ---------------------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Python environments, caches, and test output
+# ---------------------------------------------------------------------------
+
+.venv/
+.webvenv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Frontend dependencies and generated builds
+# ---------------------------------------------------------------------------
+
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.wrangler/
+frontend/.vite/
+frontend/coverage/
+frontend/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Generated pipeline data
+# ---------------------------------------------------------------------------
+
+# These directories are recreated by the data pipeline.
+data/raw/
+data/processed/
+data/enriched/
+data/review/
+
+# Keep data/references/ because it contains reviewed reference information,
+# such as verified employer aliases.
+
+# ---------------------------------------------------------------------------
+# Local editor and operating-system files
+# ---------------------------------------------------------------------------
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Temporary and local database files
+# ---------------------------------------------------------------------------
+
+*.tmp
+*.temp
+*.sqlite
+*.sqlite3
+
+# Obsolete local backups
+*.backup
+
+# Retired Streamlit frontend
+streamlit_app.py
+
+# Generated Vinext cache and downloaded fonts
+frontend/.vinext/
+
+# Template example code not used by SponsorScope
+frontend/examples/
+
+# Next.js local environment
+frontend/.env*
+!frontend/.env.example

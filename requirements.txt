@@ -1,0 +1,19 @@
+# Runtime configuration and HTTP ingestion
+python-dotenv>=1.0,<2.0
+requests>=2.32,<3.0
+
+# Data transformation and DOL Excel processing
+pandas>=2.2,<3.0
+openpyxl>=3.1,<4.0
+
+# FastAPI application server
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+
+# PostgreSQL ORM, driver, and schema migrations
+sqlalchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
+alembic>=1.14,<2.0
+
+# Automated regression tests
+pytest>=8.0,<10.0
