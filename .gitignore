@@ -43,7 +43,12 @@ yarn-error.log*
 
 # These directories are recreated by the data pipeline.
 data/raw/
-data/processed/
+
+# Ignore generated processed snapshots, except the compact DOL aggregate needed
+# by production historical matching.
+data/processed/*
+!data/processed/dol_h1b_history_2025.csv
+
 data/enriched/
 data/review/
 

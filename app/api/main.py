@@ -60,6 +60,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from app.config.settings import CORS_ALLOWED_ORIGINS
 
 
 # =============================================================================
@@ -116,14 +117,15 @@ LOCAL_FRONTEND_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+# Permit the local Next.js server and explicitly configured production sites.
+# Wildcard origins are avoided because this API may later use credentials.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=LOCAL_FRONTEND_ORIGINS,
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # =============================================================================
 # FastAPI Database Dependency
