@@ -76,7 +76,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_URL}/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, max_pages: 3, force_refresh: false }),
+        body: JSON.stringify({ query: searchQuery, max_pages: 1, force_refresh: false }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
