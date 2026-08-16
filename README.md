@@ -8,6 +8,16 @@ certified H-1B filing activity. Instead of presenting historical activity as a
 promise of future sponsorship, it keeps current policy, historical evidence,
 and uncertain results visibly separate.
 
+## Live demo
+
+- **Application:** https://h1-b-sponsor-scope.vercel.app
+- **API documentation:** https://sponsorscope-api.onrender.com/docs
+- **API health:** https://sponsorscope-api.onrender.com/health
+
+> **Free-tier notice:** The backend may take approximately one minute to wake
+> after inactivity. A new search can also take about one minute to retrieve and
+> analyze jobs; repeated searches are served from the 24-hour cache.
+
 ## Why this project exists
 
 Job boards rarely expose sponsorship eligibility as structured data. Important
