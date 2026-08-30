@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const DEFAULT_QUERY = "tech jobs in USA";
+const DEFAULT_QUERY = "Data engineer in USA";
 const PAGE_SIZE = 12;
 
 type Category = "CONFIRMED_AVAILABLE" | "HISTORICALLY_SUPPORTED" | "CONFIRMED_UNAVAILABLE" | "UNKNOWN" | "REVIEW";
@@ -87,7 +87,7 @@ export default function Home() {
     try {
       const response = await fetch(`${API_URL}/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, max_pages: 3, force_refresh: false }),
+        body: JSON.stringify({ query: searchQuery, max_pages: 2, force_refresh: false }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);

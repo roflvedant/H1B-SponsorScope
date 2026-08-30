@@ -162,7 +162,7 @@ class SearchRequest(BaseModel):
     )
 
     max_pages: int = Field(
-        default=3,
+        default=2,
         ge=1,
         le=3,
         description="Maximum number of JSearch pages to fetch.",

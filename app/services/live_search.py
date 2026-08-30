@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 import pandas as pd
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.config.settings import PROCESSED_DIRECTORY, REFERENCE_DIRECTORY
@@ -86,6 +86,7 @@ def _as_utc(value: datetime) -> datetime:
 def query_has_fresh_results(
     database: Session,
     raw_query: str,
+    minimum_results: int = 1,
 ) -> bool:
     """Return True only when a query has recent linked job results."""
 
@@ -107,12 +108,12 @@ def query_has_fresh_results(
 
     # A SearchQuery row without any SearchResult links cannot satisfy the API,
     # even when its timestamp is recent.
-    result_id = database.scalar(
-        select(SearchResult.id)
-        .where(SearchResult.search_query_id == stored_query.id)
-        .limit(1)
+    result_count = database.scalar(
+        select(func.count(SearchResult.id)).where(
+            SearchResult.search_query_id == stored_query.id
+        )
     )
-    return result_id is not None
+    return bool(result_count and result_count >= minimum_results)
 
 
 # Preserve the previous public function name for any tests or callers that
@@ -197,7 +198,11 @@ def run_live_search(
     # cache hit needs no provider call or enrichment work here.
     if (
         not force_refresh
-        and query_has_fresh_results(database, clean_query)
+        and query_has_fresh_results(
+            database,
+            clean_query,
+            minimum_results=12 if max_pages > 1 else 1,
+        )
     ):
         return {
             "query": clean_query,
@@ -222,9 +227,14 @@ def run_live_search(
     history, aliases = load_historical_data()
 
     for job in jobs:
-        job.update(
-            classify_description(job.get("description", ""))
-        )
+        job.update(classify_description(job.get("description", "")))
+
+        # Historical evidence cannot change an explicit current restriction,
+        # so skip the most expensive matcher for unavailable postings.
+        if job.get("current_policy") == "UNAVAILABLE":
+            job.update({"historical_support": False, "historical_evidence": None})
+            job["search_queries"] = [clean_query]
+            continue
 
         if history is None:
             job.update(
