@@ -49,6 +49,8 @@ JSEARCH_URL = os.getenv(
 # the account. validate_settings() checks it before an API request is made.
 JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY")
 
+RAW_SNAPSHOT_BUCKET = os.getenv("RAW_SNAPSHOT_BUCKET", "").strip()
+
 
 # ---------------------------------------------------------------------------
 # PostgreSQL configuration

@@ -16,11 +16,17 @@ from typing import Any
 
 import requests
 
+try:
+    import boto3
+except ImportError:  # pragma: no cover - optional outside AWS
+    boto3 = None
+
 from app.config.settings import (
     DEFAULT_SEARCH_QUERIES,
     JSEARCH_API_KEY,
     JSEARCH_URL,
     RAW_JSEARCH_DIRECTORY,
+    RAW_SNAPSHOT_BUCKET,
     create_data_directories,
     validate_settings,
 )
@@ -37,8 +43,8 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # Keep provider calls bounded so a stalled external API cannot block the
 # application indefinitely.
-REQUEST_TIMEOUT_SECONDS = 60
-DEFAULT_MAX_ATTEMPTS = 3
+REQUEST_TIMEOUT_SECONDS = 25
+DEFAULT_MAX_ATTEMPTS = 2
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +223,17 @@ def save_raw_jobs(payload: dict[str, Any]) -> Path:
 
     with output_file.open("w", encoding="utf-8") as file:
         json.dump(payload, file, indent=2)
+
+    if RAW_SNAPSHOT_BUCKET:
+        if boto3 is None:
+            raise RuntimeError(
+                "RAW_SNAPSHOT_BUCKET is configured but boto3 is unavailable."
+            )
+        boto3.client("s3").upload_file(
+            str(output_file),
+            RAW_SNAPSHOT_BUCKET,
+            f"jsearch/{output_file.name}",
+        )
 
     return output_file
 

@@ -37,6 +37,8 @@ SponsorScope addresses this by producing explainable categories:
 ## V1 features
 
 - Live U.S. job search through the JSearch API.
+- Broad tech searches fan out across software, data engineering, analytics,
+  and cloud roles before deterministic deduplication.
 - Timestamped raw snapshots for reproducible processing.
 - Stable job normalization and deterministic deduplication.
 - Explainable rules-based sponsorship classification.
@@ -45,6 +47,8 @@ SponsorScope addresses this by producing explainable categories:
 - Versioned classification and historical-matching results.
 - PostgreSQL persistence with Alembic migrations.
 - Search-result caching to reduce external API usage and response time.
+- AWS App Runner deployment with ECR, S3 raw snapshots, CloudWatch logs, and
+  GitHub Actions continuous delivery.
 - FastAPI endpoints for search, jobs, dashboard summaries, and health checks.
 - Responsive Next.js interface with category filters, evidence, and job links.
 - Automated regression tests and an offline classifier evaluation workflow.
@@ -103,6 +107,21 @@ flowchart TD
 - JSearch for current job postings.
 - U.S. Department of Labor LCA disclosure data for certified historical H-1B
   activity.
+
+### AWS production architecture
+
+- **App Runner:** always-provisioned FastAPI container with HTTPS and health
+  checks, replacing the sleeping Render free service.
+- **ECR:** private, vulnerability-scanned API container images.
+- **S3:** encrypted, private raw JSearch snapshots with a 90-day lifecycle.
+- **Secrets Manager:** PostgreSQL and JSearch credentials, never stored in Git.
+- **CloudWatch:** native App Runner application and deployment logs.
+- **GitHub Actions:** tests, builds, pushes immutable images, and starts a new
+  App Runner deployment using short-lived OIDC credentials.
+
+Terraform configuration is stored under `infra/aws`. See
+[`infra/aws/DEPLOYMENT.md`](infra/aws/DEPLOYMENT.md) for the one-time bootstrap
+and Vercel cutover.
 
 ## Classification evaluation
 
@@ -242,7 +261,7 @@ Example search request:
 ```json
 {
   "query": "data engineer in USA",
-  "max_pages": 1,
+  "max_pages": 3,
   "force_refresh": false
 }
 ```
@@ -272,7 +291,6 @@ The V1 test suite covers:
 
 ## Planned improvements
 
-- Public deployment of the API, database, and frontend.
 - Scheduled ingestion and monitoring.
 - Broader reviewed evaluation data across occupations.
 - Optional LLM review for uncertain cases, without overriding explicit rules.

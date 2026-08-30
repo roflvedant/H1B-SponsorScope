@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.webvenv
+frontend/node_modules
+frontend/.next
+data/raw
+data/enriched
+data/review
+__pycache__
+.pytest_cache
+*.zip
+*.log

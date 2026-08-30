@@ -42,6 +42,29 @@ from app.pipeline.transformation import deduplicate_jobs, normalize_job
 # this policy through the API's `force_refresh` option.
 CACHE_HOURS = 24
 
+BROAD_TECH_QUERY_MARKERS = {
+    "tech jobs in usa",
+    "tech jobs in us",
+    "technology jobs in usa",
+    "technology jobs in us",
+}
+
+TECH_ROLE_QUERIES = (
+    "software engineer jobs in United States",
+    "data engineer jobs in United States",
+    "data analyst jobs in United States",
+    "cloud engineer jobs in United States",
+)
+
+
+def expand_search_queries(query: str) -> list[str]:
+    """Translate a broad tech search into focused provider queries."""
+
+    normalized = normalize_text(query)
+    if normalized in BROAD_TECH_QUERY_MARKERS:
+        return list(TECH_ROLE_QUERIES)
+    return [query]
+
 
 # ---------------------------------------------------------------------------
 # PostgreSQL query-result cache
@@ -184,9 +207,11 @@ def run_live_search(
 
     # Fetch and retain the provider response before performing transformations.
     # This raw snapshot makes pipeline results reproducible and debuggable.
+    provider_queries = expand_search_queries(clean_query)
+    provider_pages = 1 if len(provider_queries) > 1 else max_pages
     payload = fetch_jobs(
-        queries=[clean_query],
-        max_pages=max_pages,
+        queries=provider_queries,
+        max_pages=provider_pages,
     )
     raw_file = save_raw_jobs(payload)
 
@@ -260,6 +285,7 @@ def run_live_search(
     return {
         "query": clean_query,
         "source": "JSEARCH",
+        "provider_queries": provider_queries,
         "received": len(raw_jobs),
         "jobs_saved": result["saved_jobs"],
         "query_job_links": result["created_links"],
