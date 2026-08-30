@@ -11,12 +11,8 @@ and uncertain results visibly separate.
 ## Live demo
 
 - **Application:** https://h1-b-sponsor-scope.vercel.app
-- **API documentation:** https://sponsorscope-api.onrender.com/docs
-- **API health:** https://sponsorscope-api.onrender.com/health
-
-> **Free-tier notice:** The backend may take approximately one minute to wake
-> after inactivity. A new search can also take about one minute to retrieve and
-> analyze jobs; repeated searches are served from the 24-hour cache.
+- **API documentation:** https://sp-1bbff7add6c94b48a8f5e322eddd4c9c.ecs.us-east-2.on.aws/docs
+- **API health:** https://sp-1bbff7add6c94b48a8f5e322eddd4c9c.ecs.us-east-2.on.aws/health
 
 ## Why this project exists
 
@@ -28,6 +24,8 @@ history alone does not prove that a particular role is eligible today.
 SponsorScope addresses this by producing explainable categories:
 
 - **Confirmed sponsorship** — the current posting explicitly offers support.
+- **AI likely available/unavailable** — a bounded model found validated current
+  evidence, clearly separated from deterministic confirmation.
 - **Historically supported** — no current restriction was found, and the
   employer and occupation match certified historical H-1B activity.
 - **Sponsorship unavailable** — the posting contains an explicit restriction.
@@ -42,6 +40,8 @@ SponsorScope addresses this by producing explainable categories:
 - Timestamped raw snapshots for reproducible processing.
 - Stable job normalization and deterministic deduplication.
 - Explainable rules-based sponsorship classification.
+- Optional bounded Amazon Bedrock evidence agent for deterministic `UNKNOWN`
+  cases, with verbatim-quote validation and no RAG.
 - Employer normalization, verified aliases, and conservative fuzzy matching.
 - Occupation resolution using normalized titles and DOL SOC evidence.
 - Versioned classification and historical-matching results.
@@ -66,6 +66,7 @@ flowchart TD
     DOLPROCESS --> HISTORY[Processed historical evidence]
 
     TRANSFORM --> CLASSIFIER[Current-posting<br/>policy classifier]
+    CLASSIFIER -->|UNKNOWN only| AGENT[Bounded Bedrock<br/>evidence agent]
     TRANSFORM --> MATCHER[Historical sponsorship matcher]
     HISTORY --> MATCHER
 
@@ -73,6 +74,7 @@ flowchart TD
     EMPLOYER --> OCCUPATION[Occupation and SOC resolution]
 
     CLASSIFIER --> ENRICHED[Versioned sponsorship evidence]
+    AGENT --> ENRICHED
     OCCUPATION --> ENRICHED
 
     ENRICHED --> DATABASE[(PostgreSQL)]
@@ -95,6 +97,7 @@ flowchart TD
 - PostgreSQL and Psycopg
 - Alembic
 - Pytest
+- Amazon Bedrock Converse API and Amazon Nova Lite
 
 ### Frontend
 
@@ -145,6 +148,24 @@ Run the evaluation locally with:
 ```powershell
 & ".\.venv\Scripts\python.exe" -m scripts.evaluate_accuracy evaluate
 ```
+
+## Bounded AI evidence agent
+
+The optional agent is deliberately narrower than a chatbot:
+
+1. Deterministic rules classify every posting first.
+2. Only `UNKNOWN` descriptions are sent to Amazon Bedrock.
+3. Nova Lite must call a typed sponsorship-assessment tool.
+4. The backend verifies every quoted sentence against the original posting.
+5. Low-confidence, malformed, or failed responses remain `UNKNOWN`.
+6. Accepted results use separate **AI likely** labels instead of pretending to
+   be deterministic confirmation.
+
+Each invocation stores its model and prompt versions, proposed and effective
+policies, evidence, confidence, latency, token counts, estimated cost, error
+status, and optional human-review fields in PostgreSQL. Set
+`SPONSORSHIP_AGENT_ENABLED=true` only after the ECS task role has
+`bedrock:InvokeModel` permission. No vector database or RAG layer is used.
 
 ## Local setup
 
@@ -293,7 +314,7 @@ The V1 test suite covers:
 
 - Scheduled ingestion and monitoring.
 - Broader reviewed evaluation data across occupations.
-- Optional LLM review for uncertain cases, without overriding explicit rules.
+- Human-review tooling and a larger reviewed agent evaluation set.
 - Authentication, saved searches, and alerts.
 - Observability for provider latency, failures, and classifier drift.
 

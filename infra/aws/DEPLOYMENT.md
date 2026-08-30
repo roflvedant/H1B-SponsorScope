@@ -84,3 +84,43 @@ Expected response:
 
 The Vercel `NEXT_PUBLIC_API_URL` must use the same URL without `/health` and
 without a trailing slash.
+
+## Enable the bounded sponsorship evidence agent
+
+The optional Bedrock agent reviews only postings left `UNKNOWN` by the
+deterministic classifier. It cannot override explicit positive, negative, or
+conflicting rules. Model output is accepted only when its confidence reaches
+the configured threshold and every evidence quotation can be found in the
+original posting.
+
+The application uses Amazon Nova Lite through the Bedrock Converse API in
+`us-east-2`. Attach the least-privilege policy in
+`infra/aws/bedrock-task-policy.json` to the ECS **task role** (not only the task
+execution role):
+
+```powershell
+aws iam put-role-policy `
+  --role-name <ECS_TASK_ROLE_NAME> `
+  --policy-name SponsorScopeBedrockInvoke `
+  --policy-document file://infra/aws/bedrock-task-policy.json
+```
+
+Add these environment variables to the ECS Express Mode service:
+
+```text
+SPONSORSHIP_AGENT_ENABLED=true
+BEDROCK_REGION=us-east-2
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+SPONSORSHIP_AGENT_MIN_CONFIDENCE=0.85
+SPONSORSHIP_AGENT_MAX_DESCRIPTION_CHARS=12000
+SPONSORSHIP_AGENT_MAX_REVIEWS_PER_SEARCH=20
+SPONSORSHIP_AGENT_WORKERS=4
+BEDROCK_INPUT_COST_PER_MILLION_USD=0.06
+BEDROCK_OUTPUT_COST_PER_MILLION_USD=0.24
+```
+
+Deploy the updated image. Container startup automatically runs the Alembic
+migration that creates `agent_sponsorship_reviews`. Confirm in CloudWatch that
+the task starts normally, then perform a new search with `force_refresh=true`
+to generate agent reviews. Cached searches created before enablement will not
+invoke Bedrock until refreshed.

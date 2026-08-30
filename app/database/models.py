@@ -239,6 +239,12 @@ class JobPosting(TimestampMixin, Base):
         back_populates="job",
         cascade="all, delete-orphan",
     )
+    agent_reviews: Mapped[
+        list["AgentSponsorshipReview"]
+    ] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
     historical_evidence: Mapped[
         list["HistoricalSponsorshipEvidence"]
     ] = relationship(
@@ -423,6 +429,86 @@ class SponsorshipClassification(Base):
             "job_id",
             "classifier_version",
             name="uq_job_classifier_version",
+        ),
+    )
+
+
+class AgentSponsorshipReview(Base):
+    """One auditable Bedrock review for a deterministic UNKNOWN posting."""
+
+    __tablename__ = "agent_sponsorship_reviews"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("job_postings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    description_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+    proposed_policy: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+    effective_policy: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4),
+        default=0,
+        nullable=False,
+    )
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        default=list,
+        nullable=False,
+    )
+    rationale: Mapped[str | None] = mapped_column(Text)
+    requires_human_review: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        index=True,
+    )
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated_cost_usd: Mapped[Decimal] = mapped_column(
+        Numeric(12, 8),
+        default=0,
+        nullable=False,
+    )
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    reviewer_decision: Mapped[str | None] = mapped_column(String(50))
+    reviewer_notes: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    analyzed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    job: Mapped["JobPosting"] = relationship(back_populates="agent_reviews")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "agent_version",
+            name="uq_job_agent_version",
         ),
     )
 

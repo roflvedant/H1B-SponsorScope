@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import (
+    AgentSponsorshipReview,
     Company,
     HistoricalSponsorshipEvidence,
     JobPosting,
@@ -307,6 +308,62 @@ def save_historical_evidence(
     )
 
 
+def save_agent_review(
+    database: Session,
+    job: JobPosting,
+    data: dict[str, Any],
+) -> None:
+    """Insert or refresh one versioned, auditable Bedrock agent review."""
+
+    review = data.get("agent_review")
+    if not isinstance(review, dict):
+        return
+
+    agent_version = review.get("agent_version")
+    if not agent_version:
+        return
+
+    stored_review = database.scalar(
+        select(AgentSponsorshipReview).where(
+            AgentSponsorshipReview.job_id == job.id,
+            AgentSponsorshipReview.agent_version == agent_version,
+        )
+    )
+
+    values = {
+        "prompt_version": review.get("prompt_version") or "unknown",
+        "model_id": review.get("model_id") or "unknown",
+        "description_hash": review.get("description_hash") or "",
+        "status": review.get("status") or "ERROR",
+        "proposed_policy": review.get("proposed_policy") or "UNKNOWN",
+        "effective_policy": review.get("effective_policy") or "UNKNOWN",
+        "confidence": review.get("confidence") or 0,
+        "evidence": review.get("evidence") or [],
+        "rationale": review.get("rationale"),
+        "requires_human_review": bool(
+            review.get("requires_human_review", True)
+        ),
+        "latency_ms": int(review.get("latency_ms") or 0),
+        "input_tokens": int(review.get("input_tokens") or 0),
+        "output_tokens": int(review.get("output_tokens") or 0),
+        "estimated_cost_usd": review.get("estimated_cost_usd") or 0,
+        "error_code": review.get("error_code"),
+    }
+
+    if stored_review is not None:
+        for field, value in values.items():
+            setattr(stored_review, field, value)
+        return
+
+    database.add(
+        AgentSponsorshipReview(
+            job_id=job.id,
+            agent_version=agent_version,
+            **values,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Transactional batch save
 # ---------------------------------------------------------------------------
@@ -334,6 +391,7 @@ def save_enriched_jobs(
             job = upsert_job(database, job_data, company)
 
             save_classification(database, job, job_data)
+            save_agent_review(database, job, job_data)
             save_historical_evidence(database, job, job_data)
 
             for raw_query in job_data.get("search_queries", []):

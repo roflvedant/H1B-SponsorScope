@@ -21,6 +21,7 @@ import pandas as pd
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.agents.sponsorship_evidence import enrich_jobs_with_agent_reviews
 from app.config.settings import PROCESSED_DIRECTORY, REFERENCE_DIRECTORY
 from app.database.models import SearchQuery, SearchResult
 from app.database.repository import normalize_text, save_enriched_jobs
@@ -290,6 +291,10 @@ def run_live_search(
 
         # Query provenance powers cached retrieval through SearchResult links.
         job["search_queries"] = [clean_query]
+
+    # Review only the deterministic UNKNOWN subset. Explicit restrictions,
+    # positive offers, and conflicting rule evidence never reach the LLM.
+    enrich_jobs_with_agent_reviews(jobs)
 
     # -----------------------------------------------------------------------
     # Replace an initial snapshot or append a continuation batch

@@ -53,6 +53,65 @@ RAW_SNAPSHOT_BUCKET = os.getenv("RAW_SNAPSHOT_BUCKET", "").strip()
 
 
 # ---------------------------------------------------------------------------
+# Bounded sponsorship evidence agent
+# ---------------------------------------------------------------------------
+
+def environment_flag(name: str, default: bool = False) -> bool:
+    """Parse a conventional boolean environment variable."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# The agent is opt-in. Deterministic rules and historical matching continue to
+# operate normally when it is disabled or when Bedrock is unavailable.
+SPONSORSHIP_AGENT_ENABLED = environment_flag(
+    "SPONSORSHIP_AGENT_ENABLED",
+    default=False,
+)
+
+BEDROCK_REGION = os.getenv(
+    "BEDROCK_REGION",
+    os.getenv("AWS_REGION", "us-east-2"),
+).strip()
+
+BEDROCK_MODEL_ID = os.getenv(
+    "BEDROCK_MODEL_ID",
+    "amazon.nova-lite-v1:0",
+).strip()
+
+# Only validated, high-confidence agent decisions affect the user-facing
+# category. The model's raw proposal is still retained for evaluation.
+SPONSORSHIP_AGENT_MIN_CONFIDENCE = float(
+    os.getenv("SPONSORSHIP_AGENT_MIN_CONFIDENCE", "0.85")
+)
+
+SPONSORSHIP_AGENT_MAX_DESCRIPTION_CHARS = int(
+    os.getenv("SPONSORSHIP_AGENT_MAX_DESCRIPTION_CHARS", "12000")
+)
+
+SPONSORSHIP_AGENT_MAX_REVIEWS_PER_SEARCH = int(
+    os.getenv("SPONSORSHIP_AGENT_MAX_REVIEWS_PER_SEARCH", "20")
+)
+
+SPONSORSHIP_AGENT_WORKERS = int(
+    os.getenv("SPONSORSHIP_AGENT_WORKERS", "4")
+)
+
+# These rates are configuration rather than business logic because Bedrock
+# pricing can change. Set both to zero to disable cost estimates while still
+# recording token usage.
+BEDROCK_INPUT_COST_PER_MILLION_USD = float(
+    os.getenv("BEDROCK_INPUT_COST_PER_MILLION_USD", "0.06")
+)
+BEDROCK_OUTPUT_COST_PER_MILLION_USD = float(
+    os.getenv("BEDROCK_OUTPUT_COST_PER_MILLION_USD", "0.24")
+)
+
+
+# ---------------------------------------------------------------------------
 # PostgreSQL configuration
 # ---------------------------------------------------------------------------
 

@@ -6,9 +6,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_QUERY = "Data engineer in USA";
 const PROVIDER_BATCH_SIZE = 20;
 
-type Category = "CONFIRMED_AVAILABLE" | "HISTORICALLY_SUPPORTED" | "CONFIRMED_UNAVAILABLE" | "UNKNOWN" | "REVIEW";
+type Category = "CONFIRMED_AVAILABLE" | "AGENT_LIKELY_AVAILABLE" | "HISTORICALLY_SUPPORTED" | "CONFIRMED_UNAVAILABLE" | "AGENT_LIKELY_UNAVAILABLE" | "UNKNOWN" | "REVIEW";
 type View = "ALL" | "POTENTIAL" | "UNAVAILABLE";
 type Evidence = { rule_id?: string; sentence?: string; matched_text?: string };
+type AgentReview = {
+  status: string; proposed_policy: string; effective_policy: string; confidence: number;
+  evidence: Evidence[]; rationale?: string | null; model_id: string;
+};
 type Job = {
   id: string; title: string; company: string; city?: string | null; state?: string | null;
   employment_type?: string | null; posted_at?: string | null; apply_url: string;
@@ -16,6 +20,7 @@ type Job = {
   historical_support: boolean; historical_evidence?: {
     matched_dol_employer?: string; matched_dol_job_title?: string; certified_lca_cases?: number;
   } | null;
+  agent_review?: AgentReview | null;
 };
 type SearchResponse = {
   query: string; source: string; count: number; jobs: Job[];
@@ -24,15 +29,22 @@ type SearchResponse = {
 
 const categoryMeta: Record<Category, { label: string; short: string; color: string }> = {
   CONFIRMED_AVAILABLE: { label: "Confirmed sponsorship", short: "Confirmed", color: "#17a673" },
+  AGENT_LIKELY_AVAILABLE: { label: "AI evidence: likely available", short: "AI likely", color: "#2f9eaa" },
   HISTORICALLY_SUPPORTED: { label: "Historically supported", short: "Historical", color: "#f0b429" },
   CONFIRMED_UNAVAILABLE: { label: "Sponsorship unavailable", short: "Unavailable", color: "#ef5b5b" },
+  AGENT_LIKELY_UNAVAILABLE: { label: "AI evidence: likely unavailable", short: "AI unlikely", color: "#dd6b55" },
   UNKNOWN: { label: "No clear signal", short: "Unknown", color: "#8794a6" },
   REVIEW: { label: "Needs review", short: "Review", color: "#8b7cf6" },
 };
 
 const categoryRank: Record<Category, number> = {
-  CONFIRMED_AVAILABLE: 0, HISTORICALLY_SUPPORTED: 1, UNKNOWN: 2, REVIEW: 3, CONFIRMED_UNAVAILABLE: 4,
+  CONFIRMED_AVAILABLE: 0, AGENT_LIKELY_AVAILABLE: 1, HISTORICALLY_SUPPORTED: 2, UNKNOWN: 3,
+  REVIEW: 4, AGENT_LIKELY_UNAVAILABLE: 5, CONFIRMED_UNAVAILABLE: 6,
 };
+
+function isUnavailable(category: Category) {
+  return category === "CONFIRMED_UNAVAILABLE" || category === "AGENT_LIKELY_UNAVAILABLE";
+}
 
 function locationOf(job: Job) {
   return [job.city, job.state].filter(Boolean).join(", ") || "United States";
@@ -141,9 +153,9 @@ export default function Home() {
     if (clean.length >= 2) search(clean);
   }
 
-  const potentialCount = jobs.filter((job) => job.category !== "CONFIRMED_UNAVAILABLE").length;
+  const potentialCount = jobs.filter((job) => !isUnavailable(job.category)).length;
   const filtered = useMemo(() => jobs
-    .filter((job) => view === "ALL" || (view === "POTENTIAL" ? job.category !== "CONFIRMED_UNAVAILABLE" : job.category === "CONFIRMED_UNAVAILABLE"))
+    .filter((job) => view === "ALL" || (view === "POTENTIAL" ? !isUnavailable(job.category) : isUnavailable(job.category)))
     .filter((job) => category === "ALL" || job.category === category)
     .filter((job) => `${job.title} ${job.company} ${locationOf(job)}`.toLowerCase().includes(withinResults.toLowerCase()))
     .sort((a, b) => categoryRank[a.category] - categoryRank[b.category] || (Date.parse(b.posted_at ?? "") || 0) - (Date.parse(a.posted_at ?? "") || 0)),
@@ -196,13 +208,17 @@ export default function Home() {
           </div>
           <p className="result-context">Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} matching roles · strongest sponsorship signals shown first</p>
           <div className="job-grid">{filtered.slice(0, visibleCount).map((job) => {
-            const meta = categoryMeta[job.category]; const evidence = job.current_policy_evidence?.[0]?.sentence;
+            const meta = categoryMeta[job.category];
+            const agentEvidence = job.agent_review && job.agent_review.effective_policy !== "UNKNOWN"
+              ? job.agent_review.evidence?.[0]?.sentence
+              : undefined;
+            const evidence = job.current_policy_evidence?.[0]?.sentence ?? agentEvidence;
             return <article className="job-card" key={job.id}><div className="card-top">
               <div className="company-logo">{job.company.slice(0, 1).toUpperCase()}</div><div className="job-title"><h3>{job.title}</h3><p>{job.company}</p></div>
               <span className="status" style={{ color: meta.color, background: `${meta.color}14`, borderColor: `${meta.color}35` }}><i style={{ background: meta.color }} />{meta.short}</span>
             </div><div className="meta"><span>⌖ {locationOf(job)}</span>{job.employment_type && <span>◷ {job.employment_type.replaceAll("_", " ")}</span>}<span>{postedLabel(job.posted_at)}</span></div>
               <div className="evidence"><span>Why this label</span><p>{evidence ?? (job.historical_support ? `${job.historical_evidence?.matched_dol_employer ?? job.company} has relevant certified H-1B filings on record.` : "No explicit sponsorship policy was found in this posting.")}</p></div>
-              <div className="card-bottom"><small>Historical activity never overrides a current restriction.</small><a href={job.apply_url} target="_blank" rel="noreferrer">View job <span>↗</span></a></div>
+              <div className="card-bottom"><small>{job.agent_review && job.agent_review.effective_policy !== "UNKNOWN" ? `AI-reviewed evidence · ${Math.round(job.agent_review.confidence * 100)}% confidence` : "Historical activity never overrides a current restriction."}</small><a href={job.apply_url} target="_blank" rel="noreferrer">View job <span>↗</span></a></div>
             </article>;
           })}</div>
           {!filtered.length && <div className="empty-state compact">No roles match these filters.</div>}

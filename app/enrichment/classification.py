@@ -18,6 +18,7 @@ import json
 import re
 from datetime import datetime, timezone
 
+from app.agents.sponsorship_evidence import enrich_jobs_with_agent_reviews
 from app.config.settings import ENRICHED_DIRECTORY, PROCESSED_DIRECTORY
 from app.enrichment.sponsorship_rules import (
     CLASSIFIER_VERSION,
@@ -173,6 +174,10 @@ def run_classification():
             job.get("description", "")
         )
         job.update(classification)
+
+    # The optional Bedrock agent sees only deterministic UNKNOWN cases. It is
+    # disabled by default and fails closed, leaving existing rule behavior intact.
+    enrich_jobs_with_agent_reviews(jobs)
 
     # Timestamped output keeps each run reproducible and prevents a later run
     # from silently overwriting an earlier classification snapshot.

@@ -91,6 +91,9 @@ class JobPosting(TypedDict, total=False):
     h1b_transfer_evidence: list[ClassificationEvidence]
     classifier_version: str
 
+    # Optional bounded Bedrock review for deterministic UNKNOWN cases
+    agent_review: dict[str, Any]
+
     # Historical employer-and-occupation evidence from DOL records
     historical_support: bool
     historical_evidence: dict[str, Any] | None

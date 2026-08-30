@@ -71,6 +71,7 @@ from app.database.connection import (
     get_database_session,
 )
 from app.database.models import (
+    AgentSponsorshipReview,
     Company,
     HistoricalSponsorshipEvidence,
     JobPosting,
@@ -188,6 +189,7 @@ class SearchRequest(BaseModel):
 def determine_category(
     current_policy: str,
     historical_support: bool,
+    agent_policy: str = "UNKNOWN",
 ) -> str:
     """
     Convert current and historical evidence into one frontend category.
@@ -207,6 +209,9 @@ def determine_category(
         Whether employer and occupation matching found relevant certified
         historical H-1B filings.
 
+    agent_policy:
+        A validated Bedrock policy for a deterministic UNKNOWN posting.
+
     Returns
     -------
     str
@@ -221,6 +226,15 @@ def determine_category(
 
     if current_policy == "CONFLICTING":
         return "REVIEW"
+
+    # Agent evidence is considered only after all deterministic current-posting
+    # states. The agent itself is invoked only for deterministic UNKNOWN cases,
+    # and its effective policy has already passed quote/confidence validation.
+    if agent_policy == "AVAILABLE":
+        return "AGENT_LIKELY_AVAILABLE"
+
+    if agent_policy == "UNAVAILABLE":
+        return "AGENT_LIKELY_UNAVAILABLE"
 
     if historical_support:
         return "HISTORICALLY_SUPPORTED"
@@ -250,7 +264,7 @@ def build_jobs_statement(
     Joining the classification table directly would return the job once for
     each version. It could therefore duplicate jobs and expose stale results.
 
-    The two subqueries below find the newest timestamp for each job. The main
+    The subqueries below find the newest timestamp for each job. The main
     query then joins only the record associated with that timestamp.
 
     Query filtering
@@ -311,6 +325,21 @@ def build_jobs_statement(
     )
 
     # -------------------------------------------------------------------------
+    # Newest bounded agent review for every job
+    # -------------------------------------------------------------------------
+
+    latest_agent_review = (
+        select(
+            AgentSponsorshipReview.job_id.label("job_id"),
+            func.max(AgentSponsorshipReview.analyzed_at).label(
+                "latest_analyzed_at"
+            ),
+        )
+        .group_by(AgentSponsorshipReview.job_id)
+        .subquery("latest_agent_review")
+    )
+
+    # -------------------------------------------------------------------------
     # Base job query
     # -------------------------------------------------------------------------
 
@@ -320,6 +349,7 @@ def build_jobs_statement(
             Company,
             SponsorshipClassification,
             HistoricalSponsorshipEvidence,
+            AgentSponsorshipReview,
         )
 
         # Keep the job even if employer resolution has not assigned a company.
@@ -369,6 +399,25 @@ def build_jobs_statement(
             & (
                 HistoricalSponsorshipEvidence.matched_at
                 == latest_history.c.latest_matched_at
+            ),
+            isouter=True,
+        )
+
+        # Agent reviews are separate from deterministic classifications so
+        # model proposals remain auditable and can never overwrite rule rows.
+        .join(
+            latest_agent_review,
+            latest_agent_review.c.job_id == JobPosting.id,
+            isouter=True,
+        )
+        .join(
+            AgentSponsorshipReview,
+            (
+                AgentSponsorshipReview.job_id == JobPosting.id
+            )
+            & (
+                AgentSponsorshipReview.analyzed_at
+                == latest_agent_review.c.latest_analyzed_at
             ),
             isouter=True,
         )
@@ -426,7 +475,7 @@ def serialize_job(row: Any) -> dict[str, Any]:
         missing history        -> historical_support=False
     """
 
-    job, company, classification, history = row
+    job, company, classification, history, agent_review = row
 
     current_policy = (
         classification.policy
@@ -437,6 +486,12 @@ def serialize_job(row: Any) -> dict[str, Any]:
     historical_support = bool(
         history
         and history.historical_support
+    )
+
+    agent_policy = (
+        agent_review.effective_policy
+        if agent_review
+        else "UNKNOWN"
     )
 
     return {
@@ -483,10 +538,38 @@ def serialize_job(row: Any) -> dict[str, Any]:
             else None
         ),
 
+        # Bounded agent evidence remains visibly distinct from deterministic
+        # rules and historical DOL activity.
+        "agent_review": (
+            {
+                "status": agent_review.status,
+                "proposed_policy": agent_review.proposed_policy,
+                "effective_policy": agent_review.effective_policy,
+                "confidence": float(agent_review.confidence),
+                "evidence": agent_review.evidence,
+                "rationale": agent_review.rationale,
+                "requires_human_review": (
+                    agent_review.requires_human_review
+                ),
+                "agent_version": agent_review.agent_version,
+                "prompt_version": agent_review.prompt_version,
+                "model_id": agent_review.model_id,
+                "latency_ms": agent_review.latency_ms,
+                "input_tokens": agent_review.input_tokens,
+                "output_tokens": agent_review.output_tokens,
+                "estimated_cost_usd": float(
+                    agent_review.estimated_cost_usd
+                ),
+            }
+            if agent_review
+            else None
+        ),
+
         # Final user-facing color/category
         "category": determine_category(
             current_policy=current_policy,
             historical_support=historical_support,
+            agent_policy=agent_policy,
         ),
 
         # The UI may display an additional review warning when either the
@@ -499,6 +582,10 @@ def serialize_job(row: Any) -> dict[str, Any]:
             or (
                 history
                 and history.requires_human_review
+            )
+            or (
+                agent_review
+                and agent_review.requires_human_review
             )
         ),
 
@@ -649,8 +736,10 @@ def dashboard(
 
     counts = {
         "CONFIRMED_AVAILABLE": 0,
+        "AGENT_LIKELY_AVAILABLE": 0,
         "HISTORICALLY_SUPPORTED": 0,
         "CONFIRMED_UNAVAILABLE": 0,
+        "AGENT_LIKELY_UNAVAILABLE": 0,
         "UNKNOWN": 0,
         "REVIEW": 0,
     }
@@ -702,8 +791,9 @@ def search_jobs(
     4. Normalize and deduplicate jobs.
     5. Classify current sponsorship language.
     6. Match historical employer/occupation evidence.
-    7. Upsert jobs and relationships into PostgreSQL.
-    8. Read the stored results through the same version-aware query used by
+    7. Review deterministic UNKNOWN cases with the bounded Bedrock agent.
+    8. Upsert jobs and relationships into PostgreSQL.
+    9. Read the stored results through the same version-aware query used by
        the other endpoints.
 
     Returning data from PostgreSQL after writing ensures the frontend sees the
