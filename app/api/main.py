@@ -173,6 +173,13 @@ class SearchRequest(BaseModel):
         description="Fetch fresh results even when cached jobs exist.",
     )
 
+    load_more: bool = Field(
+        default=False,
+        description=(
+            "Continue from cached provider cursors and append the next batch."
+        ),
+    )
+
 
 # =============================================================================
 # Sponsorship Category Logic
@@ -709,6 +716,7 @@ def search_jobs(
             query=request.query,
             max_pages=request.max_pages,
             force_refresh=request.force_refresh,
+            load_more=request.load_more,
         )
 
         normalized_query = normalize_text(

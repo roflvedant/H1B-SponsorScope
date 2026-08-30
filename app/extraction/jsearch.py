@@ -126,7 +126,8 @@ def request_page(
 def fetch_query(
     query: str,
     max_pages: int = 3,
-) -> tuple[list[dict[str, Any]], int]:
+    start_cursor: str | None = None,
+) -> tuple[list[dict[str, Any]], int, str | None]:
     """Fetch up to ``max_pages`` of cursor-paginated jobs for one query.
 
     Each raw job receives ``_search_query`` so query provenance survives later
@@ -135,7 +136,7 @@ def fetch_query(
     """
 
     jobs: list[dict[str, Any]] = []
-    cursor: str | None = None
+    cursor = start_cursor
     pages_fetched = 0
 
     for page_number in range(1, max_pages + 1):
@@ -165,7 +166,7 @@ def fetch_query(
         if not cursor:
             break
 
-    return jobs, pages_fetched
+    return jobs, pages_fetched, cursor
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +176,7 @@ def fetch_query(
 def fetch_jobs(
     queries: list[str] | None = None,
     max_pages: int = 3,
+    cursors: dict[str, str | None] | None = None,
 ) -> dict[str, Any]:
     """Fetch configured searches and return jobs with ingestion metadata."""
 
@@ -184,14 +186,17 @@ def fetch_jobs(
     selected_queries = queries or DEFAULT_SEARCH_QUERIES
     all_jobs: list[dict[str, Any]] = []
     total_pages = 0
+    next_cursors: dict[str, str | None] = {}
 
     for query in selected_queries:
-        query_jobs, pages_fetched = fetch_query(
+        query_jobs, pages_fetched, next_cursor = fetch_query(
             query,
             max_pages=max_pages,
+            start_cursor=(cursors or {}).get(query),
         )
         all_jobs.extend(query_jobs)
         total_pages += pages_fetched
+        next_cursors[query] = next_cursor
 
     return {
         "metadata": {
@@ -199,6 +204,7 @@ def fetch_jobs(
             "queries": selected_queries,
             "pages_fetched": total_pages,
             "jobs_received": len(all_jobs),
+            "next_cursors": next_cursors,
         },
         "data": {"jobs": all_jobs},
     }

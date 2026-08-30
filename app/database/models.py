@@ -80,6 +80,7 @@ class SearchQuery(TimestampMixin, Base):
     last_fetched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    pagination_state: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Deleting a query also deletes its lineage links, not the underlying jobs.
     results: Mapped[list["SearchResult"]] = relationship(

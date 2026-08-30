@@ -187,6 +187,7 @@ def run_live_search(
     query: str,
     max_pages: int = 1,
     force_refresh: bool = False,
+    load_more: bool = False,
 ) -> dict:
     """Run a cached or fresh job search and persist its complete provenance."""
 
@@ -197,26 +198,59 @@ def run_live_search(
     # The API endpoint reads the linked jobs after this function returns, so a
     # cache hit needs no provider call or enrichment work here.
     if (
-        not force_refresh
+        not load_more
+        and not force_refresh
         and query_has_fresh_results(
             database,
             clean_query,
             minimum_results=12 if max_pages > 1 else 1,
         )
+        and _query_has_pagination_state(database, clean_query)
     ):
         return {
             "query": clean_query,
             "source": "CACHE",
             "jobs_saved": 0,
+            "batch_received": 0,
+            "has_more": _query_has_more(database, clean_query),
         }
 
     # Fetch and retain the provider response before performing transformations.
     # This raw snapshot makes pipeline results reproducible and debuggable.
     provider_queries = expand_search_queries(clean_query)
     provider_pages = 1 if len(provider_queries) > 1 else max_pages
+
+    normalized_query = normalize_text(clean_query)
+    stored_query = database.scalar(
+        select(SearchQuery).where(
+            SearchQuery.normalized_query == normalized_query
+        )
+    )
+    prior_state = (
+        stored_query.pagination_state
+        if load_more and stored_query and stored_query.pagination_state
+        else {}
+    )
+    prior_cursors = prior_state.get("cursors", {})
+    active_queries = [
+        provider_query
+        for provider_query in provider_queries
+        if not prior_state.get("exhausted", {}).get(provider_query, False)
+    ]
+
+    if load_more and stored_query is not None and not active_queries:
+        return {
+            "query": clean_query,
+            "source": "CACHE",
+            "jobs_saved": 0,
+            "batch_received": 0,
+            "has_more": False,
+        }
+
     payload = fetch_jobs(
-        queries=provider_queries,
+        queries=active_queries or provider_queries,
         max_pages=provider_pages,
+        cursors=prior_cursors if load_more else None,
     )
     raw_file = save_raw_jobs(payload)
 
@@ -258,20 +292,13 @@ def run_live_search(
         job["search_queries"] = [clean_query]
 
     # -----------------------------------------------------------------------
-    # Replace the query's previous result snapshot
+    # Replace an initial snapshot or append a continuation batch
     # -----------------------------------------------------------------------
     #
-    # JobPosting records remain available for historical analysis, but the
-    # SearchResult links for this query should describe only the latest fetch.
-    # Otherwise every refresh grows the dashboard from 30 to 45, 60, and so on.
-    normalized_query = normalize_text(clean_query)
-    stored_query = database.scalar(
-        select(SearchQuery).where(
-            SearchQuery.normalized_query == normalized_query
-        )
-    )
-
-    if stored_query is not None:
+    # A new/refresh search replaces its old links. A load-more request retains
+    # those links and idempotently adds the newly discovered jobs, producing
+    # cumulative totals such as 20, 40, and 60 without duplicate cards.
+    if stored_query is not None and not load_more:
         database.execute(
             delete(SearchResult).where(
                 SearchResult.search_query_id == stored_query.id
@@ -289,6 +316,20 @@ def run_live_search(
         )
     )
     if stored_query is not None:
+        next_cursors = payload["metadata"].get("next_cursors", {})
+        exhausted = dict(prior_state.get("exhausted", {}))
+        for provider_query in provider_queries:
+            if provider_query in next_cursors:
+                exhausted[provider_query] = not bool(
+                    next_cursors[provider_query]
+                )
+        stored_query.pagination_state = {
+            "cursors": {
+                **prior_cursors,
+                **next_cursors,
+            },
+            "exhausted": exhausted,
+        }
         stored_query.last_fetched_at = datetime.now(timezone.utc)
         database.commit()
 
@@ -298,6 +339,44 @@ def run_live_search(
         "provider_queries": provider_queries,
         "received": len(raw_jobs),
         "jobs_saved": result["saved_jobs"],
+        "batch_received": len(jobs),
         "query_job_links": result["created_links"],
+        "has_more": any(
+            bool(cursor)
+            for cursor in payload["metadata"].get(
+                "next_cursors",
+                {},
+            ).values()
+        ),
         "raw_snapshot": str(raw_file),
     }
+
+
+def _query_has_more(database: Session, raw_query: str) -> bool:
+    """Return whether a cached query retains at least one provider cursor."""
+
+    stored_query = database.scalar(
+        select(SearchQuery).where(
+            SearchQuery.normalized_query == normalize_text(raw_query)
+        )
+    )
+    if stored_query is None or not stored_query.pagination_state:
+        return False
+    return any(
+        bool(cursor)
+        for cursor in stored_query.pagination_state.get(
+            "cursors",
+            {},
+        ).values()
+    )
+
+
+def _query_has_pagination_state(database: Session, raw_query: str) -> bool:
+    """Return whether a cache entry was created by the paginated pipeline."""
+
+    stored_query = database.scalar(
+        select(SearchQuery).where(
+            SearchQuery.normalized_query == normalize_text(raw_query)
+        )
+    )
+    return bool(stored_query and stored_query.pagination_state is not None)

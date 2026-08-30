@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_QUERY = "Data engineer in USA";
-const PAGE_SIZE = 12;
+const PROVIDER_BATCH_SIZE = 20;
 
 type Category = "CONFIRMED_AVAILABLE" | "HISTORICALLY_SUPPORTED" | "CONFIRMED_UNAVAILABLE" | "UNKNOWN" | "REVIEW";
 type View = "ALL" | "POTENTIAL" | "UNAVAILABLE";
@@ -17,7 +17,10 @@ type Job = {
     matched_dol_employer?: string; matched_dol_job_title?: string; certified_lca_cases?: number;
   } | null;
 };
-type SearchResponse = { query: string; source: string; count: number; jobs: Job[] };
+type SearchResponse = {
+  query: string; source: string; count: number; jobs: Job[];
+  batch_received: number; has_more: boolean;
+};
 
 const categoryMeta: Record<Category, { label: string; short: string; color: string }> = {
   CONFIRMED_AVAILABLE: { label: "Confirmed sponsorship", short: "Confirmed", color: "#17a673" },
@@ -74,37 +77,57 @@ export default function Home() {
   const [category, setCategory] = useState<Category | "ALL">("ALL");
   const [view, setView] = useState<View>("ALL");
   const [withinResults, setWithinResults] = useState("");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(PROVIDER_BATCH_SIZE);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
   const [loadingSeconds, setLoadingSeconds] = useState(0);
   const [error, setError] = useState("");
   const [source, setSource] = useState("");
   const started = useRef(false);
 
-  async function search(searchQuery: string) {
-    setLoading(true); setLoadingSeconds(0); setError(""); setCategory("ALL"); setView("ALL");
-    setWithinResults(""); setVisibleCount(PAGE_SIZE);
+  const search = useCallback(async (searchQuery: string, loadMore = false) => {
+    if (loadMore) { setLoadingMore(true); setLoadMoreError(""); }
+    else {
+      setLoading(true); setLoadingSeconds(0); setError(""); setCategory("ALL"); setView("ALL");
+      setWithinResults(""); setVisibleCount(PROVIDER_BATCH_SIZE);
+    }
     try {
       const response = await fetch(`${API_URL}/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, max_pages: 2, force_refresh: false }),
+        body: JSON.stringify({ query: searchQuery, max_pages: 2, force_refresh: false, load_more: loadMore }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail ?? "Search could not be completed.");
       }
       const data: SearchResponse = await response.json();
-      setJobs(data.jobs ?? []); setSource(data.source); setActiveQuery(searchQuery);
+      const returnedJobs = data.jobs ?? [];
+      setJobs((currentJobs) => {
+        const nextJobs = loadMore
+          ? Array.from(new Map([...currentJobs, ...returnedJobs].map((job) => [job.id, job])).values())
+          : returnedJobs;
+        setVisibleCount(nextJobs.length);
+        return nextJobs;
+      });
+      setHasMore(data.has_more);
+      setSource(data.source); setActiveQuery(searchQuery);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The search service is unavailable.");
-    } finally { setLoading(false); }
-  }
+      const message = caught instanceof Error ? caught.message : "The search service is unavailable.";
+      if (loadMore) setLoadMoreError(message);
+      else setError(message);
+    } finally {
+      if (loadMore) setLoadingMore(false);
+      else setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     search(DEFAULT_QUERY);
-  }, []);
+  }, [search]);
 
   useEffect(() => {
     if (!loading) return;
@@ -158,17 +181,17 @@ export default function Home() {
         {!!jobs.length && <>
           <div className="results-toolbar">
             <div className="view-tabs" aria-label="Choose result view">
-              <button className={view === "ALL" ? "active" : ""} onClick={() => { setView("ALL"); setVisibleCount(PAGE_SIZE); }}>All <span>{jobs.length}</span></button>
-              <button className={view === "POTENTIAL" ? "active" : ""} onClick={() => { setView("POTENTIAL"); setVisibleCount(PAGE_SIZE); }}>Potential matches <span>{potentialCount}</span></button>
-              <button className={view === "UNAVAILABLE" ? "active" : ""} onClick={() => { setView("UNAVAILABLE"); setVisibleCount(PAGE_SIZE); }}>Unavailable <span>{jobs.length - potentialCount}</span></button>
+              <button className={view === "ALL" ? "active" : ""} onClick={() => { setView("ALL"); setVisibleCount(jobs.length); }}>All <span>{jobs.length}</span></button>
+              <button className={view === "POTENTIAL" ? "active" : ""} onClick={() => { setView("POTENTIAL"); setVisibleCount(jobs.length); }}>Potential matches <span>{potentialCount}</span></button>
+              <button className={view === "UNAVAILABLE" ? "active" : ""} onClick={() => { setView("UNAVAILABLE"); setVisibleCount(jobs.length); }}>Unavailable <span>{jobs.length - potentialCount}</span></button>
             </div>
-            <input className="result-search" aria-label="Filter current results" placeholder="Filter title, company, or location" value={withinResults} onChange={(event) => { setWithinResults(event.target.value); setVisibleCount(PAGE_SIZE); }} />
+            <input className="result-search" aria-label="Filter current results" placeholder="Filter title, company, or location" value={withinResults} onChange={(event) => { setWithinResults(event.target.value); setVisibleCount(jobs.length); }} />
           </div>
           <div className="filter-bar" aria-label="Filter jobs by sponsorship status">
-            <button className={category === "ALL" ? "active" : ""} onClick={() => { setCategory("ALL"); setVisibleCount(PAGE_SIZE); }}>All signals</button>
+            <button className={category === "ALL" ? "active" : ""} onClick={() => { setCategory("ALL"); setVisibleCount(jobs.length); }}>All signals</button>
             {(Object.keys(categoryMeta) as Category[]).map((key) => {
               const count = jobs.filter((job) => job.category === key).length;
-              return count ? <button key={key} className={category === key ? "active" : ""} onClick={() => { setCategory(key); setVisibleCount(PAGE_SIZE); }}>{categoryMeta[key].short} <span>{count}</span></button> : null;
+              return count ? <button key={key} className={category === key ? "active" : ""} onClick={() => { setCategory(key); setVisibleCount(jobs.length); }}>{categoryMeta[key].short} <span>{count}</span></button> : null;
             })}
           </div>
           <p className="result-context">Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} matching roles · strongest sponsorship signals shown first</p>
@@ -183,7 +206,10 @@ export default function Home() {
             </article>;
           })}</div>
           {!filtered.length && <div className="empty-state compact">No roles match these filters.</div>}
-          {visibleCount < filtered.length && <button className="load-more" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>Show more roles</button>}
+          {hasMore && <button className="load-more" disabled={loadingMore} onClick={() => search(activeQuery, true)}>
+            {loadingMore ? "Loading and analyzing…" : `Load next ${PROVIDER_BATCH_SIZE} jobs`}
+          </button>}
+          {loadMoreError && <div className="empty-state compact">The next batch could not be loaded: {loadMoreError}</div>}
         </>}
       </>}
     </section>
