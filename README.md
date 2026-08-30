@@ -46,9 +46,10 @@ SponsorScope addresses this by producing explainable categories:
 - Occupation resolution using normalized titles and DOL SOC evidence.
 - Versioned classification and historical-matching results.
 - PostgreSQL persistence with Alembic migrations.
-- Search-result caching to reduce external API usage and response time.
-- AWS App Runner deployment with ECR, S3 raw snapshots, CloudWatch logs, and
-  GitHub Actions continuous delivery.
+- Cursor-aware cumulative search caching to reduce API usage while supporting
+  20-job continuation batches.
+- AWS ECS Express Mode deployment with ECR, Secrets Manager, CloudWatch logs,
+  and GitHub Actions continuous delivery.
 - FastAPI endpoints for search, jobs, dashboard summaries, and health checks.
 - Responsive Next.js interface with category filters, evidence, and job links.
 - Automated regression tests and an offline classifier evaluation workflow.
@@ -110,18 +111,17 @@ flowchart TD
 
 ### AWS production architecture
 
-- **App Runner:** always-provisioned FastAPI container with HTTPS and health
-  checks, replacing the sleeping Render free service.
+- **ECS Express Mode:** Fargate-based FastAPI service with HTTPS, health checks,
+  and one minimum task, replacing the sleeping Render free service.
 - **ECR:** private, vulnerability-scanned API container images.
-- **S3:** encrypted, private raw JSearch snapshots with a 90-day lifecycle.
 - **Secrets Manager:** PostgreSQL and JSearch credentials, never stored in Git.
-- **CloudWatch:** native App Runner application and deployment logs.
-- **GitHub Actions:** tests, builds, pushes immutable images, and starts a new
-  App Runner deployment using short-lived OIDC credentials.
+- **CloudWatch:** ECS container and deployment logs.
+- **GitHub Actions:** tests, builds, pushes immutable images, and forces a new
+  ECS deployment using short-lived OIDC credentials.
 
 Terraform configuration is stored under `infra/aws`. See
-[`infra/aws/DEPLOYMENT.md`](infra/aws/DEPLOYMENT.md) for the one-time bootstrap
-and Vercel cutover.
+[`infra/aws/DEPLOYMENT.md`](infra/aws/DEPLOYMENT.md) for the one-time GitHub
+deployment-role setup and production configuration.
 
 ## Classification evaluation
 

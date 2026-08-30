@@ -19,11 +19,29 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: pytest -q
+      - run: PYTHONPATH=. pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
 
   deploy:
     needs: test
+    if: >-
+      ${{ vars.AWS_DEPLOY_ROLE_ARN != '' &&
+          vars.AWS_REGION != '' &&
+          vars.ECR_REPOSITORY_URL != '' &&
+          vars.ECS_CLUSTER != '' &&
+          vars.ECS_SERVICE != '' }}
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -39,4 +57,14 @@ jobs:
           docker push "$ECR_REPOSITORY_URL:$GITHUB_SHA"
           docker push "$ECR_REPOSITORY_URL:latest"
       - name: Deploy latest image
-        run: aws apprunner start-deployment --service-arn "${{ vars.APP_RUNNER_SERVICE_ARN }}"
+        env:
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

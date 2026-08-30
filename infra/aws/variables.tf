@@ -1,17 +1,29 @@
 variable "aws_region" {
-  description = "AWS region for SponsorScope."
+  description = "AWS region containing SponsorScope ECS and ECR resources."
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "github_repository" {
-  description = "GitHub repository allowed to deploy, for example roflvedant/H1B-SponsorScope."
+  description = "GitHub repository permitted to assume the deployment role."
   type        = string
   default     = "roflvedant/H1B-SponsorScope"
 }
 
-variable "frontend_origins" {
-  description = "Comma-separated browser origins allowed by FastAPI."
+variable "ecr_repository_name" {
+  description = "Existing ECR repository used by the API."
   type        = string
-  default     = "https://h1-b-sponsor-scope.vercel.app,https://h1-b-sponsor-scope-git-main-vedant-patil1.vercel.app"
+  default     = "sponsorscope-api"
+}
+
+variable "ecs_cluster_name" {
+  description = "Existing ECS cluster used by SponsorScope."
+  type        = string
+  default     = "default"
+}
+
+variable "ecs_service_name" {
+  description = "Existing ECS Express Mode service."
+  type        = string
+  default     = "sponsorscope-api"
 }

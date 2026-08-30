@@ -1,97 +1,79 @@
-# AWS deployment
+# AWS ECS deployment
 
-SponsorScope keeps its Next.js frontend on Vercel and moves the FastAPI API to
-an always-provisioned AWS App Runner container. The existing PostgreSQL URL can
-be reused for the first cutover; database migration to RDS can be handled
-separately without blocking removal of the Render cold start.
+SponsorScope runs its Next.js frontend on Vercel and its FastAPI container on
+Amazon ECS Express Mode in `us-east-2`. PostgreSQL remains externally hosted
+during this phase. ECS retrieves the database URL and JSearch key from AWS
+Secrets Manager whenever a task starts.
 
-## Prerequisites
+## Existing production resources
 
-- AWS CLI authenticated to your AWS account
-- Terraform 1.7+
-- Docker Desktop
-- GitHub repository administrator access
+| Resource | Value |
+| --- | --- |
+| ECR repository | `sponsorscope-api` |
+| ECS cluster | `default` |
+| ECS service | `sponsorscope-api` |
+| Container port | `8000` |
+| Health endpoint | `/health` |
 
-Use `us-east-1` unless you intentionally change `aws_region`.
+The service uses one minimum task and two maximum tasks. Keeping one task
+running avoids the cold starts previously encountered on Render.
 
-## 1. Create bootstrap resources
+## One-time GitHub OIDC setup
 
-App Runner needs an ECR image before Terraform can create the service, so the
-first deployment has a short two-stage bootstrap:
+The Terraform in this directory manages only the least-privilege GitHub
+deployment identity. It deliberately does not recreate or take ownership of
+the console-created ECS Express Mode service.
+
+Run from `infra/aws` while authenticated to account `333534067159`:
 
 ```powershell
-Set-Location infra/aws
 terraform init
-terraform apply `
-  -target=aws_ecr_repository.api `
-  -target=aws_ecr_lifecycle_policy.api `
-  -target=aws_s3_bucket.raw_snapshots `
-  -target=aws_s3_bucket_public_access_block.raw_snapshots `
-  -target=aws_s3_bucket_server_side_encryption_configuration.raw_snapshots `
-  -target=aws_s3_bucket_lifecycle_configuration.raw_snapshots `
-  -target=aws_secretsmanager_secret.database_url `
-  -target=aws_secretsmanager_secret.jsearch_api_key
-```
-
-Record the account ID:
-
-```powershell
-$SponsorScopeAccount = aws sts get-caller-identity --query Account --output text
-$SponsorScopeRegion = "us-east-1"
-$SponsorScopeEcr = "$SponsorScopeAccount.dkr.ecr.$SponsorScopeRegion.amazonaws.com/sponsorscope-api"
-```
-
-## 2. Store production secrets
-
-Find the two generated secret names in AWS Secrets Manager, then store the
-current production values. Do not paste either value into Git or Terraform:
-
-```powershell
-aws secretsmanager put-secret-value --secret-id YOUR_DATABASE_SECRET_NAME --secret-string "YOUR_DATABASE_URL"
-aws secretsmanager put-secret-value --secret-id YOUR_JSEARCH_SECRET_NAME --secret-string "YOUR_JSEARCH_API_KEY"
-```
-
-## 3. Push the first container
-
-Run from the repository root:
-
-```powershell
-aws ecr get-login-password --region $SponsorScopeRegion | docker login --username AWS --password-stdin "$SponsorScopeAccount.dkr.ecr.$SponsorScopeRegion.amazonaws.com"
-docker build -t "${SponsorScopeEcr}:latest" .
-docker push "${SponsorScopeEcr}:latest"
-```
-
-## 4. Create App Runner and CI/CD
-
-```powershell
-Set-Location infra/aws
 terraform apply
 terraform output
 ```
 
-Add these repository variables under **GitHub → Settings → Secrets and
-variables → Actions → Variables**:
+If the account already contains the GitHub Actions OIDC provider, import it
+before applying instead of creating a duplicate:
 
-| Variable | Terraform output |
+```powershell
+terraform import aws_iam_openid_connect_provider.github `
+  arn:aws:iam::333534067159:oidc-provider/token.actions.githubusercontent.com
+```
+
+## GitHub repository variables
+
+Under **Settings → Secrets and variables → Actions → Variables**, add:
+
+| Variable | Value |
 | --- | --- |
-| `AWS_REGION` | `us-east-1` |
-| `AWS_DEPLOY_ROLE_ARN` | `github_actions_role_arn` |
-| `ECR_REPOSITORY_URL` | `ecr_repository_url` |
-| `APP_RUNNER_SERVICE_ARN` | `app_runner_service_arn` |
+| `AWS_REGION` | `us-east-2` |
+| `AWS_DEPLOY_ROLE_ARN` | Terraform `github_actions_role_arn` output |
+| `ECR_REPOSITORY_URL` | `333534067159.dkr.ecr.us-east-2.amazonaws.com/sponsorscope-api` |
+| `ECS_CLUSTER` | `default` |
+| `ECS_SERVICE` | `sponsorscope-api` |
 
-The next push to `main` runs tests, builds and scans a new ECR image, and
-deploys it to App Runner.
+No AWS access key or secret access key belongs in GitHub.
 
-## 5. Point Vercel to AWS
+## Automated deployment
 
-Copy Terraform's `api_url` output. In Vercel, replace
-`NEXT_PUBLIC_API_URL` with that URL for Production, Preview, and Development,
-then redeploy the frontend. Do not include a trailing slash.
+Every push to `main` performs these steps:
 
-Verify:
+1. Install dependencies and run the backend tests.
+2. Build the Docker image.
+3. Push immutable commit-SHA and `latest` tags to ECR.
+4. Force the existing ECS service to start a deployment.
+5. Wait for ECS to report a stable service.
+
+The deployment job safely skips until `AWS_DEPLOY_ROLE_ARN` is configured.
+After configuring the variables, run the workflow manually once from the
+GitHub **Actions** tab.
+
+## Production verification
+
+Verify the API before testing the Vercel application:
 
 ```text
-https://YOUR-APP-RUNNER-URL/health
+https://sp-1bbff7add6c94b48a8f5e322eddd4c9c.ecs.us-east-2.on.aws/health
 ```
 
 Expected response:
@@ -100,12 +82,5 @@ Expected response:
 {"status":"healthy"}
 ```
 
-Only remove the Render service after the Vercel site successfully completes a
-fresh search and a cached repeat against AWS.
-
-## Cost control
-
-App Runner is intentionally configured with one provisioned instance to avoid
-cold starts and a maximum of two active instances. Create an AWS Budget alert
-before leaving the service running. Terraform outputs and AWS Cost Explorer
-should be reviewed after the first full day of traffic.
+The Vercel `NEXT_PUBLIC_API_URL` must use the same URL without `/health` and
+without a trailing slash.
