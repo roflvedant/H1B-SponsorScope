@@ -54,6 +54,10 @@ Under **Settings → Secrets and variables → Actions → Variables**, add:
 
 No AWS access key or secret access key belongs in GitHub.
 
+The role trust policy uses GitHub's immutable OIDC subject format, including
+the permanent owner and repository IDs. This prevents a renamed or recycled
+repository name from inheriting deployment access.
+
 ## Automated deployment
 
 Every push to `main` performs these steps:

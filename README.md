@@ -1,12 +1,43 @@
-# SponsorScope
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="72" alt="SponsorScope logo">
+</p>
 
-Evidence-backed job intelligence for international candidates searching for
-U.S. roles with clearer sponsorship signals.
+<h1 align="center">SponsorScope</h1>
 
-SponsorScope combines language from current job postings with historical
-certified H-1B filing activity. Instead of presenting historical activity as a
-promise of future sponsorship, it keeps current policy, historical evidence,
-and uncertain results visibly separate.
+<p align="center">
+  <strong>Evidence-backed sponsorship intelligence for international job seekers.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/roflvedant/H1B-SponsorScope/actions/workflows/deploy-api-aws.yml"><img src="https://github.com/roflvedant/H1B-SponsorScope/actions/workflows/deploy-api-aws.yml/badge.svg" alt="Test and deploy status"></a>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white" alt="Next.js 16">
+  <img src="https://img.shields.io/badge/AWS-ECS-FF9900?logo=amazonwebservices&logoColor=white" alt="AWS ECS">
+  <img src="https://img.shields.io/badge/Bedrock-Nova_Lite-7B42BC" alt="Amazon Bedrock Nova Lite">
+</p>
+
+<p align="center">
+  <a href="https://h1-b-sponsor-scope.vercel.app"><strong>Open the live application →</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://sp-1bbff7add6c94b48a8f5e322eddd4c9c.ecs.us-east-2.on.aws/docs">Explore the API</a>
+  &nbsp;·&nbsp;
+  <a href="#architecture">Architecture</a>
+</p>
+
+<p align="center">
+  <img src="docs/sponsorscope-live.jpg" width="1100" alt="SponsorScope live search and sponsorship dashboard">
+</p>
+
+SponsorScope combines language from current job postings, a bounded AI evidence
+agent, and certified Department of Labor H-1B activity. It keeps current policy,
+historical behavior, and uncertainty visibly separate instead of presenting
+past sponsorship as a promise about a current role.
+
+## At a glance
+
+| Current evidence | Bounded AI | Historical context | Production engineering |
+| --- | --- | --- | --- |
+| Explainable rules detect explicit sponsorship, citizenship, and clearance language. | Amazon Bedrock reviews only unresolved jobs and must return verifiable quotes. | Employer and occupation matching connects jobs to certified DOL H-1B activity. | Next.js on Vercel, FastAPI on ECS, PostgreSQL, Docker, Terraform, and OIDC CI/CD. |
 
 ## Live demo
 
@@ -32,7 +63,7 @@ SponsorScope addresses this by producing explainable categories:
 - **Needs review** — evidence is conflicting or matching is uncertain.
 - **No clear signal** — the available evidence does not justify a conclusion.
 
-## V1 features
+## Highlights
 
 - Live U.S. job search through the JSearch API.
 - Broad tech searches fan out across software, data engineering, analytics,
@@ -128,7 +159,7 @@ deployment-role setup and production configuration.
 
 ## Classification evaluation
 
-The rules-v3 classifier was evaluated against 281 reviewed examples.
+The rules-v4 classifier was evaluated against 281 reviewed examples.
 
 | Metric | Result |
 | --- | ---: |
@@ -172,8 +203,8 @@ status, and optional human-review fields in PostgreSQL. Set
 ### 1. Clone and configure Python
 
 ```powershell
-git clone <your-repository-url>
-Set-Location h1b_project_refactor
+git clone https://github.com/roflvedant/H1B-SponsorScope.git
+Set-Location H1B-SponsorScope
 
 python -m venv .venv
 & ".\.venv\Scripts\Activate.ps1"

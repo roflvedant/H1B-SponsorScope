@@ -89,3 +89,16 @@ frontend/examples/
 # Next.js local environment
 frontend/.env*
 !frontend/.env.example
+
+# ---------------------------------------------------------------------------
+# Terraform local state
+# ---------------------------------------------------------------------------
+
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+infra/aws/github-trust-policy.json

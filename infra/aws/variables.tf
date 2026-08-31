@@ -4,10 +4,10 @@ variable "aws_region" {
   default     = "us-east-2"
 }
 
-variable "github_repository" {
-  description = "GitHub repository permitted to assume the deployment role."
+variable "github_oidc_subject_prefix" {
+  description = "Immutable GitHub OIDC subject prefix containing owner and repository IDs."
   type        = string
-  default     = "roflvedant/H1B-SponsorScope"
+  default     = "repo:roflvedant@160684790/H1B-SponsorScope@1335470046"
 }
 
 variable "ecr_repository_name" {
