@@ -76,6 +76,15 @@ def test_us_abbreviation_does_not_break_evidence_sentence() -> None:
     )
 
 
+def test_united_states_citizenship_minimum_is_unavailable() -> None:
+    """Spell-out citizenship requirements remain explicit restrictions."""
+
+    result = classify_description(
+        "United States Citizenship is a strict minimum requirement."
+    )
+    assert result["current_policy"] == "UNAVAILABLE"
+
+
 def test_work_authorization_sponsorship_is_unavailable() -> None:
     """Work-authorization sponsorship refusal is explicit negative evidence."""
 

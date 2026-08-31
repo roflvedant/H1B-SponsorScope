@@ -77,6 +77,34 @@ def test_agent_accepts_high_confidence_verbatim_evidence():
     assert client.calls[0]["toolConfig"]["toolChoice"] == {
         "tool": {"name": "record_sponsorship_assessment"}
     }
+    evidence_schema = client.calls[0]["toolConfig"]["tools"][0][
+        "toolSpec"
+    ]["inputSchema"]["json"]["properties"]["evidence_quotes"]
+    assert evidence_schema["maxItems"] == 1
+
+
+def test_agent_prompt_disallows_weak_sponsorship_proxies():
+    client = FakeBedrockClient(
+        {
+            "policy": "UNKNOWN",
+            "confidence": 0.9,
+            "evidence_quotes": [],
+            "rationale": "E-Verify alone is not a sponsorship decision.",
+            "needs_human_review": True,
+        }
+    )
+
+    make_agent(client).review(
+        {
+            "source_job_id": "job-weak-proxy",
+            "description": "We participate in E-Verify.",
+        }
+    )
+
+    system_prompt = client.calls[0]["system"][0]["text"]
+    assert "E-Verify" in system_prompt
+    assert "security clearance" in system_prompt
+    assert "exactly one strongest quotation" in system_prompt
 
 
 def test_agent_rejects_evidence_not_found_in_posting():

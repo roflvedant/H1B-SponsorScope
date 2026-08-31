@@ -36,7 +36,7 @@ The wording—not the employer name—determines the current-posting policy.
 # The version is stored in PostgreSQL with every classification, allowing us to
 # compare results from earlier and later classifier versions without losing
 # traceability.
-CLASSIFIER_VERSION = "rules-v3"
+CLASSIFIER_VERSION = "rules-v4"
 
 
 # =============================================================================
@@ -288,21 +288,21 @@ NEGATIVE_RULES = {
         r"\b(?:"
         r"(?:this\s+)?(?:position|role|job)\s+"
         r"(?:requires?|requiring)\s+"
-        r"u\.?s\.?\s+citizenship"
+        r"(?:u\.?s\.?|united\s+states)\s+citizenship"
         r"|"
         r"(?:requires?|requiring)\s+"
-        r"u\.?s\.?\s+citizenship"
+        r"(?:u\.?s\.?|united\s+states)\s+citizenship"
         r"|"
         r"(?:applicants?|candidates?|employees?)\s+"
         r"must\s+be\s+"
-        r"(?:a\s+)?u\.?s\.?\s+citizens?"
+        r"(?:a\s+)?(?:u\.?s\.?|united\s+states)\s+citizens?"
         r"|"
         r"must\s+be\s+"
-        r"(?:a\s+)?u\.?s\.?\s+citizens?"
+        r"(?:a\s+)?(?:u\.?s\.?|united\s+states)\s+citizens?"
         r"|"
-        r"u\.?s\.?\s+citizenship\s+"
+        r"(?:u\.?s\.?|united\s+states)\s+citizenship\s+"
         r"(?:is\s+)?"
-        r"(?:required|a\s+requirement)"
+        r"(?:required|(?:a\s+)?(?:strict\s+)?(?:minimum\s+)?requirement)"
         r"|"
         r"citizenship\s+"
         r"(?:is\s+)?required"
@@ -541,6 +541,5 @@ TRANSFER_RULES = {
         r"(?:an?\s+)?h-?1b\s+transfer\b"
     ),
 }
-
 
 
