@@ -28,13 +28,6 @@
   <img src="docs/sponsorscope-live.jpg" width="1100" alt="SponsorScope live search and sponsorship dashboard">
 </p>
 
-<p align="center">
-  <img
-    src="docs/sponsorscope-architecture-proof.png"
-    width="720"
-    alt="SponsorScope architecture and verified engineering metrics"
-  >
-</p>
 
 SponsorScope combines language from current job postings, a bounded AI evidence
 agent, and certified Department of Labor H-1B activity. It keeps current policy,
@@ -46,6 +39,14 @@ past sponsorship as a promise about a current role.
 | Current evidence | Bounded AI | Historical context | Production engineering |
 | --- | --- | --- | --- |
 | Explainable rules detect explicit sponsorship, citizenship, and clearance language. | Amazon Bedrock reviews only unresolved jobs and must return verifiable quotes. | Employer and occupation matching connects jobs to certified DOL H-1B activity. | Next.js on Vercel, FastAPI on ECS, PostgreSQL, Docker, Terraform, and OIDC CI/CD. |
+
+<p align="center">
+  <img
+    src="docs/sponsorscope-architecture-proof.png"
+    width="720"
+    alt="SponsorScope architecture and verified engineering metrics"
+  >
+</p>
 
 ## Live demo
 
