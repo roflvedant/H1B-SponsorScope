@@ -28,6 +28,14 @@
   <img src="docs/sponsorscope-live.jpg" width="1100" alt="SponsorScope live search and sponsorship dashboard">
 </p>
 
+<p align="center">
+  <img
+    src="docs/sponsorscope-architecture-proof.png"
+    width="720"
+    alt="SponsorScope architecture and verified engineering metrics"
+  >
+</p>
+
 SponsorScope combines language from current job postings, a bounded AI evidence
 agent, and certified Department of Labor H-1B activity. It keeps current policy,
 historical behavior, and uncertainty visibly separate instead of presenting
